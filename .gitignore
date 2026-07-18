@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Node
+node_modules/
+dist/
+build/
+.npm
+
+# Databases / File Storage
+chroma_data/
+uploads/
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+PS8_AI_Industrial_Knowledge_Intelligence_Proposal.md
+PS8_Setup_Prompt.md
