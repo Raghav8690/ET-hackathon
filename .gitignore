@@ -18,6 +18,7 @@ build/
 chroma_data/
 uploads/
 *.sqlite3
+*.db
 
 # OS
 .DS_Store
