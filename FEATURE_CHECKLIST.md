@@ -18,12 +18,12 @@ To maximize velocity, the team is divided into 5 roles. Mock outputs should be u
 ## 📂 Phase 1: Database Schema & Ingestion Pipeline (`BE-1` / `FE-1`)
 
 ### 1.1 SQL Database Schema Definition (`BE-1`)
-*   [ ] **Task 1.1.1: Define Core Database Models (SQLAlchemy)**
+*   [x] **Task 1.1.1: Define Core Database Models (SQLAlchemy)** ✅
     *   *Sub-feature*: Create models for `documents` (id, filename, filepath, doc_type, upload_date, status, metadata_json), `equipment` (id, name, serial_number, model, install_date, health_score, status), `maintenance_records` (id, equipment_id, record_date, description, cost, downtime_hours, category, failure_mode), and `inspections` (id, equipment_id, inspection_date, compliance_status, details).
     *   *Contract*: Tables defined in `backend/db/models.py`.
     *   *Testing Method*: Run a script to initialize the SQLite/PostgreSQL database and print the schemas: `python3 -c "from backend.db.models import Base; print(Base.metadata.tables.keys())"`
     *   *Dependencies*: None (Pure schema definition)
-*   [ ] **Task 1.1.2: Implement Database Session Helper**
+*   [x] **Task 1.1.2: Implement Database Session Helper** ✅
     *   *Sub-feature*: Setup sessionmaker and dependency injection engine for FastAPI (`get_db`).
     *   *Contract*: `backend/db/session.py` exporting `get_db` yielding a database session.
     *   *Testing Method*: Test session creation: `python3 -c "from backend.db.session import get_db; db = next(get_db()); print(db.is_active)"`

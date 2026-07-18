@@ -10,3 +10,9 @@
 - Status: Done
 - Notes: Aligned the features with the PS8 Hackathon Proposal document.
 ---
+## [2026-07-18 17:17] Phase 1.1 Complete – Database Schema & Session Helper
+- What was done: Implemented all SQLAlchemy ORM models (8 tables: documents, document_chunks, equipment, maintenance_records, inspections, equipment_dependencies, chat_sessions, chat_messages) and the database session helper with FastAPI dependency injection. Updated main.py to auto-initialise tables at startup via lifespan events. Uses SQLite for dev by default, PostgreSQL via DATABASE_URL env var.
+- Files changed/created: backend/db/models.py (new), backend/db/session.py (new), backend/db/__init__.py (updated), backend/main.py (updated), data/ps8_dev.db (auto-created)
+- Status: Done
+- Notes: All 8 tables verified in SQLite. Insert/query/delete smoke test passed. Schema includes UUID PKs, proper FKs, indexes, and enum-like string columns for portability.
+---
