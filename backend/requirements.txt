@@ -2,7 +2,7 @@ fastapi
 uvicorn
 chromadb
 sqlalchemy
-psycopg2
+psycopg2-binary
 pypdf2
 pdfplumber
 easyocr
@@ -11,3 +11,6 @@ openai
 python-dotenv
 python-multipart
 pytest
+httpx
+sentence-transformers
+aiofiles

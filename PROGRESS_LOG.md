@@ -25,3 +25,18 @@
 - Status: Done
 - Notes: Virtual environment created (`venv/`). All 16 pytest tests passed (7 file storage + 9 endpoint tests). Backend tested via FastAPI TestClient. Created `backend/tests/` package with comprehensive test coverage.
 ---
+## [2026-07-18 18:46] Phase 1.3 & 1.4 Completion – Preprocessing Pipeline & Vector Storage
+- What is being done:
+  - **Task 1.3.1** – Verify & harden PDF Text Extraction Service (`backend/ingestion/pdf.py`). Code exists but is unchecked – validate contract, add error handling, mark complete.
+  - **Task 1.3.2** – Verify & harden OCR Text Extraction Engine (`backend/ingestion/ocr.py`). Code exists – validate contract, add fallback to pytesseract, mark complete.
+  - **Task 1.3.3** – Verify & harden Automatic Metadata and Entity Extractor (`backend/ingestion/metadata.py`). Code exists – validate regex patterns, add date range extraction, mark complete.
+  - **Task 1.3.4** – Verify & harden Semantic Text Chunker (`backend/ingestion/chunker.py`). Code exists – validate chunk size limits, overlap logic, header detection, mark complete.
+  - **Task 1.4.1** – Build Chroma Vector Database Connection (`backend/ingestion/vector_store.py`). New file – instantiate PersistentClient, create/get collection, health check.
+  - **Task 1.4.2** – Build Embedding Generation Wrapper (`backend/ingestion/embed.py`). New file – support both OpenAI `text-embedding-3-small` and local HuggingFace `sentence-transformers` fallback.
+  - **Task 1.4.3** – Build Ingestion Pipeline Orchestrator (`backend/ingestion/pipeline.py`). New file – full pipeline combining extract → chunk → metadata → embed → Chroma insert. Updates document status to INGESTED/FAILED. Wire to FastAPI route for triggering post-upload.
+  - Add comprehensive unit tests for all Phase 1.3 and 1.4 modules.
+  - Update `requirements.txt` with any new dependencies.
+- Files changed/created: backend/ingestion/pdf.py (updated), backend/ingestion/ocr.py (updated), backend/ingestion/metadata.py (updated), backend/ingestion/chunker.py (updated), backend/ingestion/vector_store.py (new), backend/ingestion/embed.py (new), backend/ingestion/pipeline.py (new), backend/routes/documents.py (updated), backend/requirements.txt (updated), FEATURE_CHECKLIST.md (updated)
+- Status: Done
+- Notes: 1.3.x code files existed as stubs from initial scaffolding but were never tested or marked complete. 1.4.x is entirely new.
+---

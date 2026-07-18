@@ -47,39 +47,39 @@ To maximize velocity, the team is divided into 5 roles. Mock outputs should be u
     *   *Dependencies*: None (can mock endpoint)
 
 ### 1.3 Preprocessing & Extraction Pipeline (`BE-1`)
-*   [ ] **Task 1.3.1: PDF Text Extraction Service**
+*   [x] **Task 1.3.1: PDF Text Extraction Service** ✅
     *   *Sub-feature*: Set up `pypdf`/`pdfplumber` to extract page-by-page text.
     *   *Contract*: Function `extract_pdf_text(file_path: str) -> List[Dict[str, Any]]` where each dict contains `{"page": int, "text": str}`.
     *   *Testing Method*: Run: `python3 -c "from backend.ingestion.pdf import extract_pdf_text; print(extract_pdf_text('data/sample.pdf')[0])"`
     *   *Dependencies*: None
-*   [ ] **Task 1.3.2: OCR Text Extraction Engine (EasyOCR/Tesseract)**
+*   [x] **Task 1.3.2: OCR Text Extraction Engine (EasyOCR/Tesseract)** ✅
     *   *Sub-feature*: Create an image-to-text pipeline that processes scanned PDF pages and images.
     *   *Contract*: Function `extract_ocr_text(file_path: str) -> List[Dict[str, Any]]`.
     *   *Testing Method*: Run: `python3 -c "from backend.ingestion.ocr import extract_ocr_text; print(extract_ocr_text('data/scanned.png'))"`
     *   *Dependencies*: None
-*   [ ] **Task 1.3.3: Automatic Metadata and Entity Extractor**
+*   [x] **Task 1.3.3: Automatic Metadata and Entity Extractor** ✅
     *   *Sub-feature*: Regex and LLM matching modules to extract Equipment ID, Serial Numbers, Document Type (SOP, Manual, Failure Log), and date ranges.
     *   *Contract*: Function `extract_metadata(text: str) -> Dict[str, Any]`.
     *   *Testing Method*: Run unit test with text containing "Pump Model P-101 Serial Number SN-883921" and assert returns: `{"equipment_id": "P-101", "serial_number": "SN-883921", "doc_type": "manual"}`
     *   *Dependencies*: None
-*   [ ] **Task 1.3.4: Semantic Text Chunker**
+*   [x] **Task 1.3.4: Semantic Text Chunker** ✅
     *   *Sub-feature*: Split extracted text into semantic paragraphs (e.g. splitting at double newlines or headers, keeping tables intact) rather than arbitrary characters.
     *   *Contract*: Function `chunk_text(pages_content: List[Dict], chunk_size: int, overlap: int) -> List[Dict]`. Chunks retain page number, header title, and metadata.
     *   *Testing Method*: Call function and verify that no chunk exceeds size limit and chunks share overlapping boundaries.
     *   *Dependencies*: Task 1.3.1, Task 1.3.2
 
 ### 1.4 Vector Storage Pipeline (`BE-1`)
-*   [ ] **Task 1.4.1: Chroma Vector Database Connection**
+*   [x] **Task 1.4.1: Chroma Vector Database Connection** ✅
     *   *Sub-feature*: Instantiate and configure local Chroma Client.
     *   *Contract*: Module initialization checking if database folder is ready.
     *   *Testing Method*: Run: `python3 -c "import chromadb; client = chromadb.PersistentClient(path='./db/chroma'); print(client.heartbeat())"`
     *   *Dependencies*: None
-*   [ ] **Task 1.4.2: Embedding Generation Wrapper**
+*   [x] **Task 1.4.2: Embedding Generation Wrapper** ✅
     *   *Sub-feature*: Call OpenAI `text-embedding-3-small` or Local HuggingFace embedding models.
     *   *Contract*: Function `get_embeddings(texts: List[str]) -> List[List[float]]`.
     *   *Testing Method*: Run: `python3 -c "from backend.ingestion.embed import get_embeddings; print(len(get_embeddings(['test'])[0]))"` (Should output 1536 for OpenAI)
     *   *Dependencies*: None (Ensure environment keys are loaded)
-*   [ ] **Task 1.4.3: Ingestion Pipeline Orchestrator**
+*   [x] **Task 1.4.3: Ingestion Pipeline Orchestrator** ✅
     *   *Sub-feature*: Combine text extraction, chunking, metadata extraction, embedding generation, and Chroma insertion in one workflow.
     *   *Contract*: Function `ingest_document(document_id: str) -> bool`. Updates database status to `INGESTED` or `FAILED`.
     *   *Testing Method*: Manually run function on a sample manual and confirm Chroma holds records: `client.get_collection("chunks").count()` returns positive number.
