@@ -16,3 +16,12 @@
 - Status: Done
 - Notes: All 8 tables verified in SQLite. Insert/query/delete smoke test passed. Schema includes UUID PKs, proper FKs, indexes, and enum-like string columns for portability.
 ---
+## [2026-07-18 17:43] Phase 1.2 Complete – Document Upload & Local File Handler
+- What was done: Implemented all 3 tasks of Phase 1.2:
+  - **Task 1.2.1** – Local Document Storage Setup: Created `backend/services/file_storage.py` with `save_upload()`, `delete_upload()`, `file_exists()`, and `get_upload_dir()` functions. Files saved under `data/uploads/` with UUID-prefixed collision-safe filenames and optional date-based subdirectories (YYYY/MM/DD).
+  - **Task 1.2.2** – FastAPI File Upload Endpoint: Created `backend/routes/documents.py` with 4 endpoints: `POST /api/documents/upload` (accepts UploadFile, saves to disk, creates DB record with status PENDING), `GET /api/documents/list` (paginated with status/type filters), `GET /api/documents/{id}`, `DELETE /api/documents/{id}`. Registered router in `backend/main.py`.
+  - **Task 1.2.3** – Frontend Drag-and-Drop Dropzone UI: Created `frontend/src/components/FileDropzone.jsx` with drag-and-drop support, document type selector, upload queue with loading/success/error states, and `frontend/src/services/api.js` centralised API client. Premium dark-mode glassmorphic CSS styling.
+- Files changed/created: backend/services/file_storage.py (new), backend/routes/documents.py (new), backend/main.py (updated), frontend/src/components/FileDropzone.jsx (new), frontend/src/components/FileDropzone.css (new), frontend/src/services/api.js (new), backend/tests/test_phase_1_2.py (new), FEATURE_CHECKLIST.md (updated)
+- Status: Done
+- Notes: Virtual environment created (`venv/`). All 16 pytest tests passed (7 file storage + 9 endpoint tests). Backend tested via FastAPI TestClient. Created `backend/tests/` package with comprehensive test coverage.
+---

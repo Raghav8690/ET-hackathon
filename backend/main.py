@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db.session import init_db
+from backend.routes.documents import router as documents_router
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +49,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Register routers
+app.include_router(documents_router)
 
 # ---------------------------------------------------------------------------
 # Health check

@@ -30,17 +30,17 @@ To maximize velocity, the team is divided into 5 roles. Mock outputs should be u
     *   *Dependencies*: Task 1.1.1
 
 ### 1.2 Document Upload & Local File Handler (`BE-1` / `FE-1`)
-*   [ ] **Task 1.2.1: Local Document Storage Setup**
+*   [x] **Task 1.2.1: Local Document Storage Setup**
     *   *Sub-feature*: Initialize folder structures for uploaded raw files under `/data/uploads/` and verify write/read permissions.
     *   *Contract*: Module saving raw stream to file. Returns file path on disk.
     *   *Testing Method*: Call saver function with mock stream and check if file exists: `test_file_exists("/data/uploads/test.pdf")`
     *   *Dependencies*: None
-*   [ ] **Task 1.2.2: FastAPI File Upload Endpoint (`/api/documents/upload`)**
+*   [x] **Task 1.2.2: FastAPI File Upload Endpoint (`/api/documents/upload`)**
     *   *Sub-feature*: Implement FastAPI route accepting `UploadFile`, saving via Task 1.2.1, and creating a db record in `documents` with status `PENDING`.
     *   *Contract*: `POST /api/documents/upload` returning JSON `{"document_id": "uuid", "filename": "x.pdf", "status": "PENDING"}`.
     *   *Testing Method*: Send cURL: `curl -X POST -F "file=@/path/to/test.pdf" http://localhost:8000/api/documents/upload`
     *   *Dependencies*: Task 1.1.2, Task 1.2.1
-*   [ ] **Task 1.2.3: Frontend Drag-and-Drop Dropzone UI (`FE-1`)**
+*   [x] **Task 1.2.3: Frontend Drag-and-Drop Dropzone UI (`FE-1`)**
     *   *Sub-feature*: Implement file selection UI box supporting drag-and-drop file uploads.
     *   *Contract*: React component sending files to `/api/documents/upload` and showing loading spinner.
     *   *Testing Method*: Mock api endpoint returning `{"document_id": "123", "filename": "test.pdf"}` and drag-drop a file. Verify success state.
