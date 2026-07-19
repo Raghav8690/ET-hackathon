@@ -260,6 +260,14 @@ def _extract_text(file_path: str, ext: str) -> List[Dict[str, Any]]:
         return pages
     elif ext in _OCR_EXTENSIONS:
         return extract_ocr_text(file_path)
+    elif ext == ".docx":
+        from backend.ingestion.docx_parser import extract_docx_text
+        return extract_docx_text(file_path)
+    elif ext == ".doc":
+        from backend.ingestion.docx_parser import extract_doc_text
+        return extract_doc_text(file_path)
+    elif ext in {".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".tar", ".gz", ".rar", ".7z"}:
+        raise ValueError(f"Binary file type {ext} cannot be read as plain text.")
     else:
         # For other text-like files, try reading as plain text
         try:

@@ -1,1 +1,1 @@
-# Package init
+# backend/rag – Retrieval-Augmented Generation modules

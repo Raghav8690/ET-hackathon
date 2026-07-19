@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db.session import init_db
 from backend.routes.documents import router as documents_router
+from backend.routes.chat import router as chat_router
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(documents_router)
+app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
 # ---------------------------------------------------------------------------
 # Health check

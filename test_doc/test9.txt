@@ -1,0 +1,9 @@
+﻿Equipment Specification & Installation Record
+Document Type: OEM Manual / Installation Record Equipment Name: Primary Extruder Gearbox Equipment ID: GB-992 Serial Number: SN-EXT-4401 Installation Date: 2022-08-20
+1. Structural Metadata This document contains highly structured data to test the extraction of equipment metadata, including serial numbers, models, and installation dates.
+2. Lubrication Specifications
+    • Oil Type: ISO VG 320 Synthetic Gear Oil
+    • Capacity: 45 Liters
+    • Change Interval: Every 4,000 operating hours or 12 months, whichever occurs first.
+3. Commissioning Notes During the initial installation on 2022-08-20, baseline vibration signatures were recorded at 0.04 in/s. Any deviation above 0.15 in/s should trigger a critical alert in the dashboard.
+

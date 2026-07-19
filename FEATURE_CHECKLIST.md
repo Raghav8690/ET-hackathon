@@ -90,36 +90,36 @@ To maximize velocity, the team is divided into 5 roles. Mock outputs should be u
 ## 🔍 Phase 2: RAG, Vector Search & Hybrid Retrieval (`BE-2`)
 
 ### 2.1 Lexical & Dense Vector Indexing (`BE-2`)
-*   [ ] **Task 2.1.1: Vector Similarity Retriever**
+*   [x] **Task 2.1.1: Vector Similarity Retriever** ✅
     *   *Sub-feature*: Query Chroma index with query embedding, returning top-k matches with metadata filters.
     *   *Contract*: Function `retrieve_vector_matches(query_vector: List[float], k: int, filters: Dict) -> List[Dict]`.
     *   *Testing Method*: Execute retrieval and verify output matches format: `[{"text": "...", "metadata": {"page": 1, "doc_id": "..."}}]`
     *   *Dependencies*: Task 1.4.1
-*   [ ] **Task 2.1.2: BM25 Lexical Retriever**
+*   [x] **Task 2.1.2: BM25 Lexical Retriever** ✅
     *   *Sub-feature*: Instantiate a BM25 index over all document chunks stored in PostgreSQL/Chroma to fetch exact keyword matches.
     *   *Contract*: Class `BM25Index` supporting `.search(query_str: str, k: int, filters: Dict) -> List[Dict]`.
     *   *Testing Method*: Index 3 simple sentences. Search for "overheating". Verify the sentence with "overheating" ranks first.
     *   *Dependencies*: Task 1.3.4
 
 ### 2.2 Hybrid Search & Fusion Engine (`BE-2`)
-*   [ ] **Task 2.2.1: Reciprocal Rank Fusion (RRF) Implementation**
+*   [x] **Task 2.2.1: Reciprocal Rank Fusion (RRF) Implementation** ✅
     *   *Sub-feature*: Merge lists of results from Vector search and BM25 search using the RRF algorithm.
     *   *Contract*: Function `fuse_results(vector_results: List[Dict], bm25_results: List[Dict], k_constant: int = 60) -> List[Dict]`.
     *   *Testing Method*: Pass mock duplicate search result lists with differing ranks. Verify fused scores order the common elements correctly.
     *   *Dependencies*: None (can be developed with mock inputs)
-*   [ ] **Task 2.2.2: Metadata Filtering Interface**
+*   [x] **Task 2.2.2: Metadata Filtering Interface** ✅
     *   *Sub-feature*: Enable filtering by equipment_id, document type, date range, or tag during hybrid search execution.
     *   *Contract*: Combine database filters and Chroma collections filters inside the main query handler.
     *   *Testing Method*: Run: `search_hybrid("bearing failure", filters={"equipment_id": "PUMP-101"})` and verify no records from other pumps return.
     *   *Dependencies*: Tasks 2.1.1, 2.1.2
 
 ### 2.3 Ranking & Decay Optimizations (`BE-2`)
-*   [ ] **Task 2.3.1: Temporal Recency Decay Function**
+*   [x] **Task 2.3.1: Temporal Recency Decay Function** ✅
     *   *Sub-feature*: Calculate score multipliers based on age of document. Recent logs are boosted; old logs decay exponentially.
     *   *Contract*: Function `apply_recency_decay(score: float, doc_date: datetime, halflife_days: float = 365) -> float`.
     *   *Testing Method*: Pass an age of 365 days. Confirm the decayed score is half of original score.
     *   *Dependencies*: None
-*   [ ] **Task 2.3.2: Critical Alert Boosting**
+*   [x] **Task 2.3.2: Critical Alert Boosting** ✅
     *   *Sub-feature*: Detect if document chunk contains key terms like "ALERT", "CRITICAL", "FAILURE", and apply score boost.
     *   *Contract*: Boost function integrated into final sorting step.
     *   *Testing Method*: Search for "bearing". Check that chunk containing "CRITICAL ALERT: bearing melted" ranks higher than normal specification manual.
@@ -130,58 +130,58 @@ To maximize velocity, the team is divided into 5 roles. Mock outputs should be u
 ## 💬 Phase 3: AI Chat Assistant & Conversation Management (`BE-2` / `FE-1`)
 
 ### 3.1 Session Manager & History (`BE-2`)
-*   [ ] **Task 3.1.1: Conversation Session Storage Schema**
+*   [x] **Task 3.1.1: Conversation Session Storage Schema** ✅
     *   *Sub-feature*: Save and retrieve chat sessions containing a list of messages.
     *   *Contract*: Database routes `get_session_history(session_id: str) -> List[Dict]`.
     *   *Testing Method*: Insert session messages and retrieve. Assert list matches exact inserts.
     *   *Dependencies*: Task 1.1.2
-*   [ ] **Task 3.1.2: Context-Aware Buffer Generator**
+*   [x] **Task 3.1.2: Context-Aware Buffer Generator** ✅
     *   *Sub-feature*: Compile last K messages of conversation history to pass as LLM context window.
     *   *Contract*: Function `compile_chat_history(session_id: str, limit: int = 5) -> List[Dict]`.
     *   *Testing Method*: Insert 10 messages. Retrieve with limit 3, and confirm only last 3 items are returned.
     *   *Dependencies*: Task 3.1.1
 
 ### 3.2 Chat Assistant LLM Routing (`BE-2`)
-*   [ ] **Task 3.2.1: RAG Response Prompt Builder**
+*   [x] **Task 3.2.1: RAG Response Prompt Builder** ✅
     *   *Sub-feature*: Craft the system prompt injecting retrieved chunks, user metadata context, and formatting rules.
     *   *Contract*: Function `build_rag_prompt(query: str, context_chunks: List[str], history: List[Dict], mode: str) -> str`.
     *   *Testing Method*: Print prompt output. Confirm placeholder values (chunks, history, query) are injected without layout break.
     *   *Dependencies*: Task 3.1.2
-*   [ ] **Task 3.2.2: LLM Completion Client (OpenAI API with Fallbacks)**
+*   [x] **Task 3.2.2: LLM Completion Client (OpenAI API with Fallbacks)** ✅
     *   *Sub-feature*: Invoke GPT-4 completion with system instructions. If API fails, fall back to Google Gemini or Anthropic API.
     *   *Contract*: Function `generate_completion(prompt: str) -> str`.
     *   *Testing Method*: Mock API failure to trigger fallback block. Check that fallback API response is successfully returned.
     *   *Dependencies*: None
-*   [ ] **Task 3.2.3: FastAPI Chat Endpoint `/api/chat`**
+*   [x] **Task 3.2.3: FastAPI Chat Endpoint `/api/chat`** ✅
     *   *Sub-feature*: Main query handler, accepting question, filters, session ID, and mode.
     *   *Contract*: `POST /api/chat` with body `{"query": str, "session_id": str, "mode": "technical"|"manager", "filters": Dict}` returning JSON answer with metadata list.
     *   *Testing Method*: `curl -X POST -H "Content-Type: application/json" -d '{"query": "Why did pump A fail?", "session_id": "test-session"}' http://localhost:8000/api/chat`
     *   *Dependencies*: Tasks 2.2.1, 3.2.1, 3.2.2
 
 ### 3.3 Tone & Presentation Mode Switching (`BE-2` / `FE-1`)
-*   [ ] **Task 3.3.1: System Prompt Tone Variations**
+*   [x] **Task 3.3.1: System Prompt Tone Variations** ✅
     *   *Sub-feature*: Alter system prompts based on toggle. Technical mode (forces focus on specifications, clearances, limits) vs. Manager mode (forces focus on costs, schedules, downstream impacts).
     *   *Contract*: Prompt generation templates matching selected mode.
     *   *Testing Method*: Send a query in "manager" mode. Assert response contains financial keywords (e.g. "Cost", "Loss", "Savings").
     *   *Dependencies*: Task 3.2.1
-*   [ ] **Task 3.3.2: Citation & Reference Extractor**
+*   [x] **Task 3.3.2: Citation & Reference Extractor** ✅
     *   *Sub-feature*: Post-process LLM response or require structured output (JSON schema) to extract citations pointing to specific document, page, and chunk.
     *   *Contract*: Returns structured response: `{"answer": "...", "citations": [{"document_id": "...", "page": 2, "snippet": "..."}]}`.
     *   *Testing Method*: Test parser with mock LLM text containing `[Source: ManualA, Page 4]`. Verify citations parse cleanly into list.
     *   *Dependencies*: Task 3.2.3
 
 ### 3.4 Chat UI Development (`FE-1`)
-*   [ ] **Task 3.4.1: Message Stream & Bubble Layout**
+*   [x] **Task 3.4.1: Message Stream & Bubble Layout** ✅
     *   *Sub-feature*: Create a responsive chat area with User and AI speech bubbles supporting markdown formatting.
     *   *Contract*: React component `ChatWindow` drawing messages.
     *   *Testing Method*: Feed static list of messages to component state. Verify markdown tables and bullet lists display correctly.
     *   *Dependencies*: None
-*   [ ] **Task 3.4.2: Citation Overlay Modal & Cards**
+*   [x] **Task 3.4.2: Citation Overlay Modal & Cards** ✅
     *   *Sub-feature*: Citation cards appearing under AI answers. Clicking them reveals full citation snippet or pdf preview.
     *   *Contract*: Component rendering citation snippets interactively.
     *   *Testing Method*: Click on citation card and confirm popup reveals target page snippet.
     *   *Dependencies*: Task 3.4.1
-*   [ ] **Task 3.4.3: Session Sidebar & Metadata Selector**
+*   [x] **Task 3.4.3: Session Sidebar & Metadata Selector** ✅
     *   *Sub-feature*: Left-hand sidebar containing list of previous conversation sessions and checkboxes to filter retrieval.
     *   *Contract*: Active state management linking filters to the API call payload.
     *   *Testing Method*: Select filters. Click "Send" in Chat window and confirm outgoing payload includes the selected filters.
