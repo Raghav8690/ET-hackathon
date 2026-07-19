@@ -1,12 +1,12 @@
 """
-PS8 – Ingestion Pipeline Orchestrator (Task 1.4.3)
+PS8 – Ingestion Pipeline Orchestrator
 
 Combines the full document processing workflow:
-1. Text extraction (PDF / OCR)
+1. Text extraction (PDF / OCR / plain text)
 2. Semantic chunking
-3. Metadata extraction
+3. LLM-powered metadata extraction (via local Ollama)
 4. Embedding generation
-5. Chroma vector insertion
+5. Chroma vector insertion with rich metadata
 6. Database status updates
 
 Contract
@@ -46,9 +46,9 @@ def ingest_document(document_id: str, db: Session) -> bool:
     1. Load document record from DB.
     2. Extract text (PDF or OCR based on file type).
     3. Chunk extracted text into semantic segments.
-    4. Extract metadata from the full text.
+    4. Extract metadata from the full text (LLM-powered via Ollama).
     5. Generate embeddings for all chunks.
-    6. Insert chunks + embeddings into Chroma.
+    6. Insert chunks + embeddings into Chroma with rich metadata.
     7. Save chunk metadata to SQL database.
     8. Update document status to INGESTED.
 
@@ -108,13 +108,21 @@ def ingest_document(document_id: str, db: Session) -> bool:
             db.commit()
             return True
 
-        # --- 4. Extract metadata ---
+        # --- 4. Extract metadata (LLM-powered via Ollama or regex fallback) ---
         metadata = extract_metadata(full_text)
         doc.metadata_json = json.dumps(metadata)
 
-        # Link to equipment if detected
-        if metadata.get("equipment_id"):
-            _maybe_link_equipment(doc, metadata["equipment_id"], db)
+        logger.info(
+            "Metadata extraction method: %s | doc_type: %s | equipment: %s",
+            metadata.get("_extraction_method", "unknown"),
+            metadata.get("doc_type", "other"),
+            metadata.get("equipment_id", "none"),
+        )
+
+        # Link to equipment if detected (auto-creates if not found)
+        equipment_id_str = metadata.get("equipment_id")
+        if equipment_id_str:
+            _link_or_create_equipment(doc, metadata, db)
 
         # Set date range if detected
         if metadata.get("date_range_start"):
@@ -132,27 +140,34 @@ def ingest_document(document_id: str, db: Session) -> bool:
             except ValueError:
                 pass
 
+        # Set compliance flag if detected
+        if metadata.get("compliance_relevant"):
+            doc.compliance_relevant = True
+
         # --- 5. Generate embeddings ---
         chunk_texts = [c["text"] for c in chunks]
         embeddings = get_embeddings(chunk_texts)
 
-        # --- 6. Insert into Chroma ---
+        # --- 6. Insert into Chroma with rich metadata ---
         collection = get_or_create_collection()
         chunk_ids = []
         chunk_metadatas = []
-        
+
+        # Build rich per-chunk metadata for vector search filtering
+        doc_level_meta = _build_doc_level_chroma_meta(metadata, doc)
+
         for i, chunk in enumerate(chunks):
             chunk_id = f"{document_id}_chunk_{i}"
             chunk_ids.append(chunk_id)
-            chunk_metadatas.append({
-                "document_id": document_id,
-                "filename": doc.filename,
+
+            # Per-chunk metadata (merge doc-level + chunk-specific)
+            chunk_meta = {
+                **doc_level_meta,
+                "chunk_index": i,
                 "page": chunk.get("page", 1),
                 "section_title": chunk.get("section_title", "General"),
-                "chunk_index": i,
-                "doc_type": metadata.get("doc_type", "other"),
-                "equipment_id": metadata.get("equipment_id", ""),
-            })
+            }
+            chunk_metadatas.append(chunk_meta)
 
         # Chroma upsert (handles both insert and update)
         collection.upsert(
@@ -187,10 +202,11 @@ def ingest_document(document_id: str, db: Session) -> bool:
         db.commit()
 
         logger.info(
-            "✅ Successfully ingested %s: %d chunks, %d vectors",
+            "✅ Successfully ingested %s: %d chunks, %d vectors, method=%s",
             doc.filename,
             len(chunks),
             len(embeddings),
+            metadata.get("_extraction_method", "unknown"),
         )
         return True
 
@@ -236,21 +252,115 @@ def _extract_text(file_path: str, ext: str) -> List[Dict[str, Any]]:
             raise ValueError(f"Unsupported file type: {ext}")
 
 
-def _maybe_link_equipment(
-    doc: Document, equipment_id_str: str, db: Session
+def _build_doc_level_chroma_meta(
+    metadata: Dict[str, Any], doc: "Document"
+) -> Dict[str, Any]:
+    """Build a flat metadata dict suitable for Chroma (strings/ints/floats/bools only).
+
+    Chroma metadata values must be str, int, float, or bool.
+    Lists are joined as comma-separated strings.
+    """
+    meta: Dict[str, Any] = {
+        "document_id": doc.id,
+        "filename": doc.filename,
+        "doc_type": metadata.get("doc_type", "other"),
+    }
+
+    # String fields
+    for key in (
+        "equipment_id", "equipment_name", "equipment_type",
+        "serial_number", "model_number", "manufacturer",
+        "severity", "summary", "language",
+        "date_range_start", "date_range_end",
+    ):
+        val = metadata.get(key)
+        if val and isinstance(val, str):
+            # Chroma has metadata value size limits, truncate long strings
+            meta[key] = val[:500]
+
+    # List fields → comma-separated strings
+    for key in (
+        "failure_modes", "root_causes", "tags",
+        "compliance_references", "locations",
+        "technical_specs", "action_items",
+        "costs_mentioned", "key_entities",
+    ):
+        val = metadata.get(key)
+        if isinstance(val, list) and val:
+            meta[key] = ", ".join(str(v) for v in val[:20])[:1000]
+
+    # Boolean fields
+    if metadata.get("compliance_relevant") is not None:
+        meta["compliance_relevant"] = bool(metadata["compliance_relevant"])
+
+    # Extraction method for debugging
+    meta["extraction_method"] = metadata.get("_extraction_method", "unknown")
+
+    return meta
+
+
+def _link_or_create_equipment(
+    doc: Document, metadata: Dict[str, Any], db: Session
 ) -> None:
-    """Try to link the document to an existing equipment record by name/model."""
+    """Link document to an existing equipment record, or auto-create one.
+
+    Searches by equipment_id, equipment_name, serial_number, and model_number.
+    If no match is found, creates a new Equipment record using the
+    LLM-extracted metadata.
+    """
     from backend.db.models import Equipment
 
-    equip = (
-        db.query(Equipment)
-        .filter(
-            (Equipment.name.ilike(f"%{equipment_id_str}%"))
-            | (Equipment.model.ilike(f"%{equipment_id_str}%"))
-            | (Equipment.serial_number.ilike(f"%{equipment_id_str}%"))
+    equipment_id_str = metadata.get("equipment_id", "")
+    equipment_name = metadata.get("equipment_name", "")
+    serial_number = metadata.get("serial_number")
+    model_number = metadata.get("model_number")
+
+    # --- Try to find existing equipment ---
+    search_terms = [t for t in [equipment_id_str, equipment_name] if t]
+
+    for term in search_terms:
+        equip = (
+            db.query(Equipment)
+            .filter(
+                (Equipment.name.ilike(f"%{term}%"))
+                | (Equipment.model.ilike(f"%{term}%"))
+                | (Equipment.serial_number.ilike(f"%{term}%"))
+            )
+            .first()
         )
-        .first()
+        if equip:
+            doc.equipment_id = equip.id
+            logger.info("Linked document to existing equipment: %s (%s)", equip.name, equip.id)
+            return
+
+    # Also try serial number if available
+    if serial_number:
+        equip = (
+            db.query(Equipment)
+            .filter(Equipment.serial_number.ilike(f"%{serial_number}%"))
+            .first()
+        )
+        if equip:
+            doc.equipment_id = equip.id
+            logger.info("Linked document to equipment by serial: %s (%s)", equip.name, equip.id)
+            return
+
+    # --- No match found: auto-create equipment ---
+    # Build a name: prefer equipment_name, fall back to equipment_id
+    name = equipment_name or equipment_id_str or "Unknown Equipment"
+
+    new_equip = Equipment(
+        name=name,
+        serial_number=serial_number,
+        model=model_number or equipment_id_str,
+        manufacturer=metadata.get("manufacturer"),
+        status="OPERATIONAL",
     )
-    if equip:
-        doc.equipment_id = equip.id
-        logger.info("Linked document to equipment: %s (%s)", equip.name, equip.id)
+    db.add(new_equip)
+    db.flush()  # Get the generated ID without committing
+
+    doc.equipment_id = new_equip.id
+    logger.info(
+        "Auto-created equipment '%s' (id=%s, serial=%s, model=%s) and linked to document",
+        name, new_equip.id, serial_number, model_number,
+    )
