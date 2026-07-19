@@ -128,12 +128,12 @@ class TestDocumentUploadEndpoint:
         yield
         # Optional: leave tables intact for inspection; drop in CI if needed
 
-    def _upload_test_file(self, filename="test_upload.pdf", content=b"%PDF-1.4 test content"):
+    def _upload_test_file(self, filename="test_upload.pdf", content=b"%PDF-1.4 test content", auto_ingest=False):
         """Helper to upload a file and return the response JSON."""
         response = self.client.post(
             "/api/documents/upload",
             files={"file": (filename, io.BytesIO(content), "application/pdf")},
-            params={"doc_type": "MANUAL"},
+            params={"doc_type": "MANUAL", "auto_ingest": auto_ingest},
         )
         return response
 

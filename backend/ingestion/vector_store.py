@@ -108,13 +108,14 @@ def collection_count(name: str = COLLECTION_NAME) -> int:
         return 0
 
 
-def reset_collection(name: str = COLLECTION_NAME) -> None:
-    """Delete and recreate a collection.  **Dev/test only.**"""
+def reset_collection(name: str = COLLECTION_NAME) -> chromadb.Collection:
+    """Delete and recreate a collection. Returns the fresh collection."""
     client = get_chroma_client()
     try:
         client.delete_collection(name)
         logger.info("Deleted collection '%s'", name)
-    except Exception:
-        pass
-    client.get_or_create_collection(name=name)
+    except Exception as exc:
+        logger.warning("Could not delete collection '%s' (may not exist): %s", name, exc)
+    coll = client.get_or_create_collection(name=name)
     logger.info("Recreated collection '%s'", name)
+    return coll

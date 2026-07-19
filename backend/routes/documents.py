@@ -42,8 +42,7 @@ def _document_equipment_fields(doc: Document) -> dict:
         "equipment_id": metadata.get("equipment_id"),
         "equipment_name": metadata.get("equipment_name"),
         "equipment_registry_id": doc.equipment_id,
-        # Keep metadata_json for backwards compatibility, while providing a
-        # parsed object for every downstream API client and analytics service.
+        # Provide parsed metadata dict for API clients and analytics services.
         "metadata": metadata,
     }
 
@@ -167,7 +166,6 @@ def list_documents(
                 "status": d.status,
                 "file_size_bytes": d.file_size_bytes,
                 "upload_date": d.upload_date.isoformat() if d.upload_date else None,
-                "metadata_json": d.metadata_json,
                 **_document_equipment_fields(d),
             }
             for d in docs
@@ -194,7 +192,6 @@ def get_document(document_id: str, db: Session = Depends(get_db)):
         "file_size_bytes": doc.file_size_bytes,
         "upload_date": doc.upload_date.isoformat() if doc.upload_date else None,
         "processed_date": doc.processed_date.isoformat() if doc.processed_date else None,
-        "metadata_json": doc.metadata_json,
         "error_message": doc.error_message,
         **_document_equipment_fields(doc),
     }

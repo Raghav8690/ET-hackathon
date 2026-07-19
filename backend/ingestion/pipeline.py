@@ -170,12 +170,30 @@ def ingest_document(document_id: str, db: Session) -> bool:
             chunk_metadatas.append(chunk_meta)
 
         # Chroma upsert (handles both insert and update)
-        collection.upsert(
-            ids=chunk_ids,
-            documents=chunk_texts,
-            embeddings=embeddings,
-            metadatas=chunk_metadatas,
-        )
+        try:
+            collection.upsert(
+                ids=chunk_ids,
+                documents=chunk_texts,
+                embeddings=embeddings,
+                metadatas=chunk_metadatas,
+            )
+        except Exception as exc:
+            err_msg = str(exc)
+            if "expecting embedding with dimension" in err_msg or "dimension" in err_msg.lower():
+                logger.warning(
+                    "Chroma embedding dimension mismatch (%s). Resetting collection and retrying upsert...",
+                    err_msg,
+                )
+                from backend.ingestion.vector_store import reset_collection
+                collection = reset_collection()
+                collection.upsert(
+                    ids=chunk_ids,
+                    documents=chunk_texts,
+                    embeddings=embeddings,
+                    metadatas=chunk_metadatas,
+                )
+            else:
+                raise
         logger.info("Upserted %d vectors into Chroma for %s", len(chunk_ids), doc.filename)
 
         # --- 7. Save chunks to SQL ---

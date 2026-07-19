@@ -1,3 +1,11 @@
+## [2026-07-19] Redundant metadata_json Removal & Chroma Vector Dimension Mismatch Recovery
+- What was done:
+  - **Removed Redundant `metadata_json` Output**: Removed the escaped `metadata_json` string field from `GET /api/documents/{id}` and `GET /api/documents/list` responses in `backend/routes/documents.py`. API clients now receive clean, non-redundant parsed `metadata` objects without escaped slashes.
+  - **Chroma Embedding Dimension Mismatch Recovery**: Added automatic error recovery in `backend/ingestion/pipeline.py` and `backend/ingestion/vector_store.py`. If an embedding model change occurs (e.g., from 384-dim to 768-dim), Chroma's `InvalidArgumentError` is caught, the collection is automatically reset/recreated for the new dimension, and vector upserts succeed seamlessly.
+  - **Test Suite Updates & Validation**: Updated unit test helpers in `test_phase_1_2.py` and added `test_ingest_document_dimension_mismatch_recovery` in `test_phase_1_4.py`. All 56 backend unit tests passed.
+- Files changed: `backend/routes/documents.py`, `backend/ingestion/pipeline.py`, `backend/ingestion/vector_store.py`, `backend/tests/test_phase_1_2.py`, `backend/tests/test_phase_1_4.py`, `PROGRESS_LOG.md`.
+- Status: Done
+---
 ## [2026-07-18 16:06] Project Scaffold Setup
 - What was done: Created the foundational project structure for PS8, including frontend, backend, data, and docs directories. Setup the tracking files.
 - Files changed/created: FEATURE_CHECKLIST.md, PROGRESS_LOG.md, .env.example, .gitignore, README.md, backend/, frontend/, data/, docs/
