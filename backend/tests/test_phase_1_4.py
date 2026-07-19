@@ -124,6 +124,22 @@ class TestEmbeddings:
         assert len(result) == 1
         assert len(result[0]) == 3
 
+    @patch("backend.ingestion.embed.httpx.Client")
+    @patch("backend.ingestion.embed.OLLAMA_EMBEDDING_MODEL", "embeddinggemma")
+    def test_ollama_uses_current_batch_endpoint_and_embedding_model(self, mock_client_cls):
+        from backend.ingestion.embed import _embed_ollama
+
+        response = MagicMock()
+        response.json.return_value = {"embeddings": [[0.1, 0.2]]}
+        mock_client = mock_client_cls.return_value.__enter__.return_value
+        mock_client.post.return_value = response
+
+        assert _embed_ollama(["test"]) == [[0.1, 0.2]]
+        mock_client.post.assert_called_once_with(
+            "http://localhost:11434/api/embed",
+            json={"model": "embeddinggemma", "input": ["test"]},
+        )
+
 
 # ===================================================================
 # Task 1.4.3 – Ingestion Pipeline Orchestrator

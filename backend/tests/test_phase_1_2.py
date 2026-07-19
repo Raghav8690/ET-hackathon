@@ -9,6 +9,7 @@ Tests cover:
 import io
 import os
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -211,6 +212,21 @@ class TestDocumentUploadEndpoint:
         """POST /api/documents/upload with no file should return 422."""
         resp = self.client.post("/api/documents/upload")
         assert resp.status_code == 422
+
+
+class TestDocumentEquipmentResponse:
+    def test_exposes_asset_tag_and_registry_uuid_separately(self):
+        from backend.routes.documents import _document_equipment_fields
+
+        fields = _document_equipment_fields(SimpleNamespace(
+            metadata_json='{"equipment_id": "P-101", "equipment_name": "Pump A"}',
+            equipment_id="679e8c7d-5150-4ebd-9cda-8790a8352543",
+        ))
+
+        assert fields["equipment_id"] == "P-101"
+        assert fields["equipment_name"] == "Pump A"
+        assert fields["equipment_registry_id"] == "679e8c7d-5150-4ebd-9cda-8790a8352543"
+        assert fields["metadata"]["equipment_id"] == "P-101"
 
 
 if __name__ == "__main__":

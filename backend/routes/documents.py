@@ -10,6 +10,7 @@ GET    /api/documents/{id}      – Retrieve a single document record.
 DELETE /api/documents/{id}      – Delete a document and its file.
 """
 
+import json
 import logging
 from typing import Optional
 
@@ -23,6 +24,28 @@ from backend.services.file_storage import delete_upload, save_upload
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
+
+
+def _document_equipment_fields(doc: Document) -> dict:
+    """Expose the extracted asset tag separately from the registry UUID.
+
+    ``Document.equipment_id`` is a foreign key to ``Equipment.id`` and is
+    therefore intentionally a UUID. Returning it as the public equipment ID
+    made clients appear to receive a randomly extracted tag.
+    """
+    try:
+        metadata = json.loads(doc.metadata_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        metadata = {}
+
+    return {
+        "equipment_id": metadata.get("equipment_id"),
+        "equipment_name": metadata.get("equipment_name"),
+        "equipment_registry_id": doc.equipment_id,
+        # Keep metadata_json for backwards compatibility, while providing a
+        # parsed object for every downstream API client and analytics service.
+        "metadata": metadata,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +168,7 @@ def list_documents(
                 "file_size_bytes": d.file_size_bytes,
                 "upload_date": d.upload_date.isoformat() if d.upload_date else None,
                 "metadata_json": d.metadata_json,
+                **_document_equipment_fields(d),
             }
             for d in docs
         ],
@@ -172,7 +196,7 @@ def get_document(document_id: str, db: Session = Depends(get_db)):
         "processed_date": doc.processed_date.isoformat() if doc.processed_date else None,
         "metadata_json": doc.metadata_json,
         "error_message": doc.error_message,
-        "equipment_id": doc.equipment_id,
+        **_document_equipment_fields(doc),
     }
 
 

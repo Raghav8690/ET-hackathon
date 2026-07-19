@@ -53,6 +53,29 @@ _EQUIPMENT_PATTERNS = [
     re.compile(r"\b([A-Z]{1,5}[\-][0-9]{2,6}[A-Z]?)\b"),
 ]
 
+
+def _extract_equipment_id_regex(text: str) -> Optional[str]:
+    """Return the first explicit equipment tag present in *text*.
+
+    An equipment tag such as ``P-101`` is a stronger source of truth than an
+    LLM interpretation. This prevents a plausible-but-invented LLM tag from
+    replacing a real asset tag during metadata extraction.
+    """
+    for pattern in _EQUIPMENT_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(1).upper()
+    return None
+
+
+def _extract_serial_number_regex(text: str) -> Optional[str]:
+    """Return the first explicit serial number present in *text*."""
+    for pattern in _SERIAL_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(1).upper()
+    return None
+
 _SERIAL_PATTERNS = [
     re.compile(
         r"(?:Serial\s*(?:Number|No\.?|#))\s*[:\-]?\s*([A-Z0-9][\w\-]{3,30})",
@@ -109,6 +132,7 @@ Return ONLY a valid JSON object (no markdown, no backticks, no commentary) with 
   "equipment_id": "Primary equipment identifier like PUMP-101, C-302, V-401, or any alphanumeric equipment code",
   "equipment_name": "Full equipment name like Centrifugal Pump A",
   "equipment_type": "Equipment category like pump, compressor, valve, motor, conveyor, turbine, boiler",
+  "equipment_mentions": [{"equipment_id": "Explicit asset tag or null", "equipment_name": "Name or null", "equipment_type": "Type or null", "relationship": "primary, affected, upstream, downstream, or related"}],
   "serial_number": "Serial number if found",
   "model_number": "Model or part number if found",
   "manufacturer": "Manufacturer or OEM name if mentioned",
@@ -116,13 +140,17 @@ Return ONLY a valid JSON object (no markdown, no backticks, no commentary) with 
   "locations": ["Physical locations: plants, buildings, areas, bays"],
   "people_and_roles": ["People with their role, e.g. John Smith (Inspector)"],
   "dates_mentioned": ["Dates in YYYY-MM-DD format"],
+  "event_dates": [{"date": "YYYY-MM-DD", "event_type": "failure, maintenance, inspection, recommendation_due, or other", "description": "short source-grounded description"}],
   "date_range_start": "Earliest date YYYY-MM-DD or null",
   "date_range_end": "Latest date YYYY-MM-DD or null",
   "failure_modes": ["Failure modes or problems described"],
   "root_causes": ["Root causes identified or suspected"],
   "severity": "LOW, MEDIUM, HIGH, or CRITICAL if mentioned, else null",
   "costs_mentioned": ["Cost figures like $500 parts, $3000 repair"],
+  "structured_costs": [{"amount": 500.0, "currency": "USD", "cost_type": "parts, labor, repair, downtime, annual_impact, or other", "period": "one_time, hourly, daily, yearly, or null", "evidence": "exact supporting text"}],
   "downtime_hours": "Total downtime hours mentioned or null",
+  "inspection_status": "COMPLIANT, NON_COMPLIANT, OVERDUE, PENDING_REVIEW, or null",
+  "inspection_date": "YYYY-MM-DD or null",
   "compliance_references": ["Regulatory standards: OSHA, ISO, API etc."],
   "compliance_relevant": false,
   "technical_specs": ["Technical specifications: measurements, ratings, pressures, temperatures"],
@@ -131,7 +159,10 @@ Return ONLY a valid JSON object (no markdown, no backticks, no commentary) with 
 }
 
 CRITICAL RULES:
-- Extract equipment_id even if it is an informal name like "Pump A" or "Motor 3" — use whatever identifier is present.
+- equipment_id must be an explicit asset tag/code exactly as written in the document (for example P-101 or C-302). Do not use an equipment name as an ID.
+- Put informal names such as "Pump A" or "Motor 3" in equipment_name, not equipment_id.
+- Root causes must have explicit causal evidence (for example 'caused by', 'due to', or 'root cause'). Otherwise leave root_causes empty.
+- Cost, compliance, inspection, and event-date fields must be extracted only when stated in the document.
 - Do NOT fabricate information, only extract what is present.
 - Convert dates to YYYY-MM-DD format when possible.
 - Return ONLY the raw JSON object. No explanations, no markdown fences.
@@ -289,7 +320,7 @@ def _clean_llm_metadata(raw_meta: Dict[str, Any]) -> Dict[str, Any]:
         "equipment_id", "equipment_name", "equipment_type",
         "serial_number", "model_number", "manufacturer",
         "date_range_start", "date_range_end",
-        "severity", "downtime_hours",
+        "severity", "downtime_hours", "inspection_status", "inspection_date",
     ):
         val = _clean_string_value(raw_meta.get(key))
         if val:
@@ -319,6 +350,12 @@ def _clean_llm_metadata(raw_meta: Dict[str, Any]) -> Dict[str, Any]:
     elif isinstance(compliance_val, str):
         cleaned["compliance_relevant"] = compliance_val.lower() in ("true", "yes", "1")
 
+    # --- Structured collections used by the analytics phases ---
+    for key in ("equipment_mentions", "event_dates", "structured_costs"):
+        value = raw_meta.get(key)
+        if isinstance(value, list):
+            cleaned[key] = [item for item in value if isinstance(item, dict)]
+
     # --- Normalise doc_type ---
     valid_doc_types = {
         "manual", "sop", "report", "inspection", "compliance",
@@ -335,6 +372,112 @@ def _clean_llm_metadata(raw_meta: Dict[str, Any]) -> Dict[str, Any]:
     return cleaned
 
 
+_COST_PATTERN = re.compile(
+    r"(?P<currency>[$€£]|USD|INR|EUR|GBP)\s?(?P<amount>[\d,]+(?:\.\d+)?)\s*(?:/\s*(?P<period>hour|day|month|year|hr|yr))?",
+    re.IGNORECASE,
+)
+
+
+def _normalise_analytics_metadata(text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Add deterministic, source-grounded structures required by Phase 4."""
+    equipment_mentions = []
+    seen_ids = set()
+    for match in _EQUIPMENT_PATTERNS[1].finditer(text):
+        equipment_id = match.group(1).upper()
+        if equipment_id not in seen_ids:
+            equipment_mentions.append({
+                "equipment_id": equipment_id,
+                "equipment_name": metadata.get("equipment_name") if equipment_id == metadata.get("equipment_id") else None,
+                "equipment_type": metadata.get("equipment_type") if equipment_id == metadata.get("equipment_id") else None,
+                "relationship": "primary" if equipment_id == metadata.get("equipment_id") else "related",
+            })
+            seen_ids.add(equipment_id)
+    if metadata.get("equipment_id") and metadata["equipment_id"] not in seen_ids:
+        equipment_mentions.insert(0, {
+            "equipment_id": metadata["equipment_id"], "equipment_name": metadata.get("equipment_name"),
+            "equipment_type": metadata.get("equipment_type"), "relationship": "primary",
+        })
+    metadata["equipment_mentions"] = equipment_mentions
+
+    structured_costs = []
+    for match in _COST_PATTERN.finditer(text):
+        raw_currency = match.group("currency").upper()
+        currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(raw_currency, raw_currency)
+        period = match.group("period")
+        context = text[max(0, match.start() - 80): min(len(text), match.end() + 80)]
+        context_lower = context.lower()
+        cost_type = "annual_impact" if period in ("year", "yr") else "downtime" if "downtime" in context_lower else "repair" if "repair" in context_lower else "other"
+        structured_costs.append({
+            "amount": float(match.group("amount").replace(",", "")), "currency": currency,
+            "cost_type": cost_type, "period": {"hr": "hourly", "hour": "hourly", "day": "daily", "month": "monthly", "year": "yearly", "yr": "yearly"}.get(period),
+            "evidence": match.group(0),
+        })
+    metadata["structured_costs"] = structured_costs
+
+    event_dates = []
+    for date in _extract_dates(text):
+        iso_date = date.strftime("%Y-%m-%d")
+        position = text.find(iso_date)
+        context = text[max(0, position - 100): position + 150].lower() if position >= 0 else text.lower()
+        event_type = "inspection" if "inspection" in context else "maintenance" if any(word in context for word in ("serviced", "maintenance", "repair")) else "failure" if any(word in context for word in ("failure", "incident", "overheat")) else "other"
+        event_dates.append({"date": iso_date, "event_type": event_type, "description": None})
+    metadata["event_dates"] = event_dates
+    metadata["dates"] = list(metadata.get("dates_mentioned", []))  # legacy alias
+
+    lower_text = text.lower()
+    if "non-compliant" in lower_text or "noncompliant" in lower_text:
+        metadata["inspection_status"] = "NON_COMPLIANT"
+    elif "overdue" in lower_text:
+        metadata["inspection_status"] = "OVERDUE"
+    elif "compliant" in lower_text:
+        metadata["inspection_status"] = "COMPLIANT"
+    else:
+        # An inspection result is operationally significant: reject an LLM
+        # label unless the document itself supports it.
+        metadata.pop("inspection_status", None)
+    if metadata.get("inspection_status"):
+        metadata["inspection_status"] = metadata["inspection_status"].upper().replace("-", "_")
+        if not metadata.get("inspection_date") and event_dates:
+            inspection_events = [event for event in event_dates if event["event_type"] == "inspection"]
+            if inspection_events:
+                metadata["inspection_date"] = inspection_events[0]["date"]
+
+    downtime_match = re.search(r"\b([\d.]+)\s*(?:hours?|hrs?)\s+(?:of\s+)?downtime\b", lower_text)
+    if downtime_match:
+        metadata["downtime_hours"] = float(downtime_match.group(1))
+    elif metadata.get("downtime_hours"):
+        value_match = re.search(r"[\d.]+", str(metadata["downtime_hours"]))
+        if value_match:
+            metadata["downtime_hours"] = float(value_match.group(0))
+        else:
+            metadata.pop("downtime_hours", None)
+
+    if metadata.get("compliance_relevant") and not any(
+        marker in lower_text for marker in ("compliance", "compliant", "inspection", "osha", "iso", "regulatory")
+    ):
+        metadata["compliance_relevant"] = False
+
+    severity = (metadata.get("severity") or "").upper()
+    if severity not in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+        severity_match = re.search(r"\b(low|medium|high|critical)\b", lower_text)
+        if severity_match:
+            metadata["severity"] = severity_match.group(1).upper()
+        else:
+            metadata.pop("severity", None)
+
+    # Do not present a symptom as a root cause without causal language in the
+    # source sentence. Preserve explicit, evidence-backed root causes only.
+    grounded_causes = []
+    for cause in metadata.get("root_causes", []):
+        cause_pos = lower_text.find(cause.lower())
+        sentence = text[max(0, text.rfind(".", 0, cause_pos) + 1): text.find(".", cause_pos) if cause_pos >= 0 and text.find(".", cause_pos) >= 0 else len(text)].lower()
+        if cause_pos >= 0 and any(marker in sentence for marker in ("root cause", "caused by", "due to", "because of", "attributed to")):
+            grounded_causes.append(cause)
+    metadata["root_causes"] = grounded_causes
+    metadata["metadata_schema_version"] = "2.0"
+    return metadata
+
+
 # ---------------------------------------------------------------------------
 # Regex-only fallback (original logic)
 # ---------------------------------------------------------------------------
@@ -343,18 +486,14 @@ def _extract_metadata_regex(text: str) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
 
     # Equipment ID
-    for pattern in _EQUIPMENT_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            metadata["equipment_id"] = match.group(1).upper()
-            break
+    equipment_id = _extract_equipment_id_regex(text)
+    if equipment_id:
+        metadata["equipment_id"] = equipment_id
 
     # Serial Number
-    for pattern in _SERIAL_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            metadata["serial_number"] = match.group(1).upper()
-            break
+    serial_number = _extract_serial_number_regex(text)
+    if serial_number:
+        metadata["serial_number"] = serial_number
 
     # Document Type
     text_lower = text.lower()
@@ -440,17 +579,39 @@ def extract_metadata(text: str) -> Dict[str, Any]:
                     len(metadata),
                 )
 
-                # Also try regex for equipment_id if LLM missed it
-                if not metadata.get("equipment_id"):
-                    for pattern in _EQUIPMENT_PATTERNS:
-                        match = pattern.search(text)
-                        if match:
-                            metadata["equipment_id"] = match.group(1).upper()
-                            logger.info(
-                                "Regex supplemented equipment_id: %s",
-                                metadata["equipment_id"],
-                            )
-                            break
+                # An explicit source-text tag is authoritative. The LLM is
+                # only allowed to supply an ID when it repeats text that is
+                # actually present in the document.
+                regex_equipment_id = _extract_equipment_id_regex(text)
+                llm_equipment_id = metadata.get("equipment_id")
+                if regex_equipment_id:
+                    if llm_equipment_id and llm_equipment_id.upper() != regex_equipment_id:
+                        logger.warning(
+                            "Discarding LLM equipment_id %r; source text contains %s",
+                            llm_equipment_id,
+                            regex_equipment_id,
+                        )
+                    metadata["equipment_id"] = regex_equipment_id
+                elif llm_equipment_id and llm_equipment_id.casefold() not in text.casefold():
+                    logger.warning(
+                        "Discarding LLM equipment_id %r because it does not occur in source text",
+                        llm_equipment_id,
+                    )
+                    metadata.pop("equipment_id", None)
+
+                # Apply the same grounding rule to serial numbers. They are
+                # used to link/create registry records and must never be an
+                # LLM-generated value.
+                regex_serial_number = _extract_serial_number_regex(text)
+                llm_serial_number = metadata.get("serial_number")
+                if regex_serial_number:
+                    metadata["serial_number"] = regex_serial_number
+                elif llm_serial_number and llm_serial_number.casefold() not in text.casefold():
+                    logger.warning(
+                        "Discarding LLM serial_number %r because it does not occur in source text",
+                        llm_serial_number,
+                    )
+                    metadata.pop("serial_number", None)
 
                 # Supplement with regex date extraction on full text (LLM
                 # only sees truncated text, regex can scan the whole thing)
@@ -462,7 +623,7 @@ def extract_metadata(text: str) -> Dict[str, Any]:
                     metadata["date_range_start"] = metadata["dates_mentioned"][0]
                     metadata["date_range_end"] = metadata["dates_mentioned"][-1]
 
-                return metadata
+                return _normalise_analytics_metadata(text, metadata)
             else:
                 logger.warning("LLM returned unparseable output, falling back to regex")
         else:
@@ -475,4 +636,4 @@ def extract_metadata(text: str) -> Dict[str, Any]:
         )
 
     # --- Fallback: regex-only ---
-    return _extract_metadata_regex(text)
+    return _normalise_analytics_metadata(text, _extract_metadata_regex(text))

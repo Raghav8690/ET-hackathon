@@ -284,6 +284,7 @@ def _build_doc_level_chroma_meta(
         "compliance_references", "locations",
         "technical_specs", "action_items",
         "costs_mentioned", "key_entities",
+        "equipment_mentions",
     ):
         val = metadata.get(key)
         if isinstance(val, list) and val:

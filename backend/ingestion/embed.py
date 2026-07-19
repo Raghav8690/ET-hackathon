@@ -27,6 +27,9 @@ LOCAL_MODEL = "all-MiniLM-L6-v2"
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL: Optional[str] = os.getenv("OLLAMA_MODEL")
+# Keep the chat/metadata model separate from the embedding model. Models such
+# as gpt-oss support completion but do not expose the embedding capability.
+OLLAMA_EMBEDDING_MODEL: Optional[str] = os.getenv("OLLAMA_EMBEDDING_MODEL")
 
 _local_model = None
 _embedding_source: Optional[str] = None  # Track which backend is active
@@ -52,7 +55,7 @@ def _openai_available() -> bool:
 
 def _ollama_available() -> bool:
     """Check whether Ollama is configured for embeddings."""
-    return bool(OLLAMA_MODEL and OLLAMA_MODEL.strip())
+    return bool(OLLAMA_EMBEDDING_MODEL and OLLAMA_EMBEDDING_MODEL.strip())
 
 
 def _get_local_model():
@@ -140,7 +143,7 @@ def get_embedding_source() -> str:
     if _openai_available():
         return f"openai:{OPENAI_MODEL}"
     if _ollama_available():
-        return f"ollama:{OLLAMA_MODEL}"
+        return f"ollama:{OLLAMA_EMBEDDING_MODEL}"
     return f"local:{LOCAL_MODEL}"
 
 
@@ -176,61 +179,36 @@ def _embed_openai(texts: List[str]) -> List[List[float]]:
 def _embed_ollama(texts: List[str]) -> List[List[float]]:
     """Generate embeddings via local Ollama API.
 
-    Uses the /api/embed endpoint (batch) which is available in Ollama 0.1.26+.
-    Falls back to /api/embeddings (single) for older versions.
+    Uses Ollama's current batch ``/api/embed`` endpoint. The legacy
+    ``/api/embeddings`` endpoint was removed by newer Ollama versions.
     """
     global _embedding_source
 
-    all_embeddings: List[List[float]] = []
-
-    # Try batch endpoint first (/api/embed)
     url_batch = f"{OLLAMA_BASE_URL}/api/embed"
-    url_single = f"{OLLAMA_BASE_URL}/api/embeddings"
 
     try:
         with httpx.Client(timeout=120.0) as client:
-            # Try batch endpoint
-            try:
-                response = client.post(
-                    url_batch,
-                    json={"model": OLLAMA_MODEL, "input": texts},
-                )
-                response.raise_for_status()
-                data = response.json()
-                embeddings = data.get("embeddings", [])
-                if embeddings and len(embeddings) == len(texts):
-                    _embedding_source = f"ollama:{OLLAMA_MODEL}"
-                    logger.info(
-                        "Ollama batch generated %d embeddings (dim=%d)",
-                        len(embeddings), len(embeddings[0]),
-                    )
-                    return embeddings
-            except (httpx.HTTPStatusError, KeyError):
-                logger.info("Ollama batch /api/embed not available, using single endpoint")
-
-            # Fallback: single embedding endpoint
-            for text in texts:
-                response = client.post(
-                    url_single,
-                    json={"model": OLLAMA_MODEL, "prompt": text},
-                )
-                response.raise_for_status()
-                data = response.json()
-                embedding = data.get("embedding", [])
-                all_embeddings.append(embedding)
+            response = client.post(
+                url_batch,
+                json={"model": OLLAMA_EMBEDDING_MODEL, "input": texts},
+            )
+            response.raise_for_status()
+            data = response.json()
+            embeddings = data.get("embeddings", [])
+            if not embeddings or len(embeddings) != len(texts):
+                raise RuntimeError("Ollama returned an incomplete embedding response")
 
     except httpx.ConnectError:
         raise RuntimeError(f"Cannot connect to Ollama at {OLLAMA_BASE_URL}. Is Ollama running?")
     except Exception as exc:
         raise RuntimeError(f"Ollama embedding failed: {exc}") from exc
 
-    _embedding_source = f"ollama:{OLLAMA_MODEL}"
-    if all_embeddings:
-        logger.info(
-            "Ollama single generated %d embeddings (dim=%d)",
-            len(all_embeddings), len(all_embeddings[0]),
-        )
-    return all_embeddings
+    _embedding_source = f"ollama:{OLLAMA_EMBEDDING_MODEL}"
+    logger.info(
+        "Ollama generated %d embeddings (dim=%d) using %s",
+        len(embeddings), len(embeddings[0]), OLLAMA_EMBEDDING_MODEL,
+    )
+    return embeddings
 
 
 def _embed_local(texts: List[str]) -> List[List[float]]:

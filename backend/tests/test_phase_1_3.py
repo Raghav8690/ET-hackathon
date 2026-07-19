@@ -169,6 +169,43 @@ class TestMetadataExtraction:
         metadata = extract_metadata(text)
         assert metadata.get("equipment_id") == "C-302"
 
+    @patch("backend.ingestion.metadata._call_ollama", return_value='{"equipment_id": "C-999", "doc_type": "report"}')
+    @patch("backend.ingestion.metadata._ollama_is_configured", return_value=True)
+    def test_explicit_equipment_tag_overrides_llm_guess(self, _, __):
+        """The LLM must not replace an asset tag explicitly found in source text."""
+        metadata = extract_metadata("Failure report for Pump A (P-101).")
+        assert metadata["equipment_id"] == "P-101"
+
+    @patch("backend.ingestion.metadata._call_ollama", return_value='{"equipment_id": "C-999", "doc_type": "report"}')
+    @patch("backend.ingestion.metadata._ollama_is_configured", return_value=True)
+    def test_hallucinated_equipment_tag_is_discarded(self, _, __):
+        metadata = extract_metadata("Failure report for Pump A.")
+        assert "equipment_id" not in metadata
+
+    @patch("backend.ingestion.metadata._call_ollama", return_value='{"serial_number": "SN-000000", "doc_type": "report"}')
+    @patch("backend.ingestion.metadata._ollama_is_configured", return_value=True)
+    def test_explicit_serial_number_overrides_llm_guess(self, _, __):
+        metadata = extract_metadata("Pump P-101 serial number SN-883921 failed.")
+        assert metadata["serial_number"] == "SN-883921"
+
+    def test_analytics_metadata_is_normalised_from_source(self):
+        text = (
+            "Failure report: Pump A (P-101) and Compressor C-302 failed on 2026-07-15. "
+            "The inspection was non-compliant. Annual downtime impact is $50,000/year. "
+            "Root cause: cooling system failure caused bearing overheating."
+        )
+        with patch("backend.ingestion.metadata._ollama_is_configured", return_value=False):
+            metadata = extract_metadata(text)
+
+        assert {item["equipment_id"] for item in metadata["equipment_mentions"]} == {"P-101", "C-302"}
+        assert metadata["structured_costs"] == [{
+            "amount": 50000.0, "currency": "USD", "cost_type": "annual_impact",
+            "period": "yearly", "evidence": "$50,000/year",
+        }]
+        assert metadata["inspection_status"] == "NON_COMPLIANT"
+        assert metadata["event_dates"][0]["event_type"] == "inspection"
+        assert metadata["metadata_schema_version"] == "2.0"
+
     def test_empty_text(self):
         metadata = extract_metadata("")
         assert metadata["doc_type"] == "other"

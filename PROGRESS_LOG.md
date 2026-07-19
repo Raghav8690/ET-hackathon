@@ -4,6 +4,13 @@
 - Status: Done
 - Notes: Used Vite with React for the frontend as per instructions. FastAPI setup with basic structure for the backend.
 ---
+## [2026-07-19] Ingestion Metadata Grounding & Equipment-ID API Correction
+- What was done: Hardened metadata extraction so explicit equipment tags and serial numbers found by regex in the source text override LLM output. LLM identifiers not present in the source text are discarded, preventing plausible-but-fabricated equipment/serial IDs from creating or linking incorrect registry entries. Updated the Ollama extraction prompt to keep informal names in `equipment_name` and reserve `equipment_id` for explicit asset tags.
+- API contract correction: `GET /api/documents/{id}` and `GET /api/documents/list` now return `equipment_id` as the extracted asset tag (for example `P-101`) and expose the database foreign-key UUID separately as `equipment_registry_id`. The UUID is intentional internal registry linkage, not the extracted equipment identifier.
+- Files changed: `backend/ingestion/metadata.py`, `backend/routes/documents.py`, `backend/tests/test_phase_1_2.py`, `backend/tests/test_phase_1_3.py`, `PROGRESS_LOG.md`.
+- Verification: New focused tests passed (equipment-tag grounding and public API field mapping). The broad legacy Phase 1 suite still has five unrelated failures: invalid-PDF auto-ingest timing in one upload test, two outdated tests expecting `dates` instead of `dates_mentioned`, and two Windows-incompatible vector-store tests that set the path to `/fake/dir`.
+- Status: Done
+---
 ## [2026-07-18 16:57] Expanded Feature Checklist for Parallel Development
 - What was done: Expanded the FEATURE_CHECKLIST.md file in extreme depth, breaking down every feature into testable sub-features down to the smallest units. Assigned developer roles, defined contracts, and established independent testing methods for parallel collaboration.
 - Files changed/created: FEATURE_CHECKLIST.md, PROGRESS_LOG.md
@@ -39,4 +46,18 @@
 - Files changed/created: backend/ingestion/pdf.py (updated), backend/ingestion/ocr.py (updated), backend/ingestion/metadata.py (updated), backend/ingestion/chunker.py (updated), backend/ingestion/vector_store.py (new), backend/ingestion/embed.py (new), backend/ingestion/pipeline.py (new), backend/routes/documents.py (updated), backend/requirements.txt (updated), FEATURE_CHECKLIST.md (updated)
 - Status: Done
 - Notes: 1.3.x code files existed as stubs from initial scaffolding but were never tested or marked complete. 1.4.x is entirely new.
+---
+## [2026-07-19] Ollama Embedding Model Separation
+- What was done: Corrected the embedding wrapper to use only Ollama's current batch endpoint, `/api/embed`; the removed legacy `/api/embeddings` fallback was the source of the 404 log. Added `OLLAMA_EMBEDDING_MODEL`, separate from `OLLAMA_MODEL`, so a chat/metadata model cannot be incorrectly used for vector generation.
+- Environment behavior: `gpt-oss:120b-cloud` is retained for metadata extraction. Its local Ollama model record advertises completion/tools/thinking only, so embeddings now use the local HuggingFace fallback until a dedicated model (for example `embeddinggemma`) is installed and configured.
+- Files changed: `backend/ingestion/embed.py`, `.env`, `.env.example`, `backend/tests/test_phase_1_4.py`, `PROGRESS_LOG.md`.
+- Verification: Six embedding-focused tests passed, including a regression test confirming `/api/embed` receives `OLLAMA_EMBEDDING_MODEL`; changed module compiles cleanly.
+- Status: Done
+---
+## [2026-07-19] Analytics-Ready Ingestion Metadata Schema
+- What was done: Added schema version 2.0 enrichment for multi-equipment documents, structured monetary costs, typed event dates, inspection status/date, severity normalisation, and deterministic date compatibility fields. Root causes are now retained only when the source sentence contains explicit causal evidence, avoiding symptoms being reported as causes.
+- API contract: Document detail/list responses retain `metadata_json` for backward compatibility and now also expose parsed `metadata`, removing the need for clients to decode an escaped JSON string.
+- Files changed: `backend/ingestion/metadata.py`, `backend/ingestion/pipeline.py`, `backend/routes/documents.py`, `backend/tests/test_phase_1_2.py`, `backend/tests/test_phase_1_3.py`, `PROGRESS_LOG.md`.
+- Verification: 26 metadata/chunking tests and the API metadata mapping test passed; changed ingestion and route modules compile cleanly.
+- Status: Done
 ---
